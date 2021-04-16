@@ -2,57 +2,82 @@ clear all;
 clear D1;
 close all;
 getd = @(p)path(p,path);
-getd('toolbox_signal/');;%toolbox to be used in generating+acquiring CS coeffecients
+getd('toolbox_signal/');%toolbox to be used in generating+acquiring CS coeffecients
 getd('toolbox_general/');
-name = '13';
+% % % % We first make use of P low pass linear measurements to
+% % % remove the low frequency content of the image. 
+% % % % Natural images are not only sparse over a wavelet domain.
+% % % They also exhibit a fast decay of the coefficient through the scale. 
+% % % The coarse (low pass) wavelets caries much of the image energy. 
+% % % It thus make sense to measure directly the low pass coefficients.
+% % % % We load an image f?Rn2 of n×n pixels.
+name = '01';
 n = 256;
 f1 = load_image(name, n);
-
-% f_compare= load_image('00', n);
-% %f_compare1 =rescale(f_compare,n);
-%  figure('name','original resized Image');
-% imshow(uint8(f_compare));
-% imwrite(uint8(f_compare),'black.png');
-% 
-% %f1=imread('cameraman.png');
-% 
+f = rescale(f1,n);
 % % %  %---------------------------------------
 % % %  %% % % % %CS coeffs :
 % % %  %---------------------------------------
-f = rescale(f1,n);
+% Shortcuts for the wavelet transform {?f,?m?}m.7
+% We only compute up to a scale J so that only k0 sub-bands are transformed.
 k0 = 2;
 J = log2(n)-k0;
 Wav  = @(f)perform_wavelet_transf(f,J,+1);
 WavI = @(x)perform_wavelet_transf(x,J,-1);
+% % Compute the wavelet transform.
 fw = Wav(f);
-% figure;
-% plot_wavelet(fw, J);
+figure;
+% % Display the coefficients.
+% % an approximation fLow using the P=22J=(n/k0)2 low pass coefficients.
+plot_wavelet(fw, J);
 ex1
 fwLow = zeros(n);
 fwLow(1:2^J,1:2^J) = fw(1:2^J,1:2^J);
 fLow = WavI(fwLow);
 myplot = @(f1)imageplot(clamp(f1), ['PSNR=' num2str(psnr(f,f1),3) 'dB']);
-% figure;
-% myplot(fLow);
-
+figure;
+myplot(fLow);
+% % We consider a compressed sensing operator that corresponds to randomized orthogonal projections.
+% % 
+% % Extract the high pass wavelet coefficients, x0={?f,?m?}m?I0.
 A = ones(n,n); A(1:2^J,1:2^J) = 0;
 I0 = find(A==1);
 x0 = fw(I0);
-N = length(x0);
+N = length(x0);%Number of coefficients
+% % % % Number P0=22J=(n/k0)2 of low pass measurements.
 P0 = (n/2^k0)^2;
+% % % % Number of CS measurements.
 P = 4 * P0;
+% % % Generate random permutation operators S1,S2:RN?RN 
+% % % so that Sk(x)i=x?k(i) where ?k??N is a random permutation of {1,…,N}.
 sigma1 = randperm(N)';
 sigma2 = randperm(N)';
 S1 = @(x)x(sigma1);
 S2 = @(x)x(sigma2);
+% % % % The adjoint (and also inverse) operators S?1,
+% % % % S?2 (denoted S1S,S2S) corresponds to the inverse permutation ??k such that ??k??k(i)=i.
 sigma1S = 1:N; sigma1S(sigma1) = 1:N;
 sigma2S = 1:N; sigma2S(sigma2) = 1:N;
 S1S = @(x)x(sigma1S);
 S2S = @(x)x(sigma2S);
+
+% % % We consider a CS operator ?:RN?RP that corresponds to a projection on randomized atoms
+% % % (?x)i=?x,??2(i)?
+% % % where ?i is a scrambled orthogonal basis
+% % % ?i(x)=ci(?1(x))
+% % % where {ci}i is the orthogonal DCT basis.
+% % % 
+% % % This can be rewritten in compact operator form as
+% % % ?x=(S2?C?S1(x))?P
+% % % where S1,S2 are the permutation operators, and ?P selects the P first entries of a vector.
 downarrow = @(x)x(1:P);
 Phi = @(x)downarrow(S2(dct(S1(x))));
+% % % The adjoint operator is
+% % % ??x=S?1?C??S?2(x?P)
+% % % where ?P append N?P zeros at the end of a vector, and C? is the inverse DCT transform.
 uparrow = @(x)[x; zeros(N-P,1)];
 PhiS = @(x)S1S(idct(S2S(uparrow(x))));
+% % % Perform the CS (noiseless) measurements.
 y = Phi(x0);;%y contains the CS Coefficients of the image
 % % figure;
 % % imagesc(reshape(y,218,218));
@@ -69,8 +94,8 @@ ch1=ch ;
 l= strsplit(ch);
 l2=l.';
 l3=str2num(char(l2));
-mes1='0xfad2d8d7a6c8d8211e5c218211c421d2196e8ddc6a0e099e2521ea7921da621c';
- msg=strcat(ch1,'_',mes1);
+%mes1='0xfad2d8d7a6c8d8211e5c218211c421d2196e8ddc6a0e099e2521ea7921da621c';
+% msg=strcat(ch1,'_',mes1);
 % % % % %  without blockchain ID
  msg=strcat(ch1);
 % save('pfile.mat','msg')
@@ -81,7 +106,7 @@ mes1='0xfad2d8d7a6c8d8211e5c218211c421d2196e8ddc6a0e099e2521ea7921da621c';
 % % % % %  %---------------------------------------
 % % % % %  %% % % % %Data Embedding:
 % % % % %  %---------------------------------------
-imname='13_watermarked.png';
+imname='01_watermarked.png';
 % 
 coverImage=f1;
 message=char(msg);
@@ -121,9 +146,9 @@ imwrite(uint8(stego_image),imname);
 % % % % % % %  %% % % % %Filtres:
 % % % % % % % % %  %---------------------------------------
 % % % % % % % % % %  
-imname='24_watermarked.png';
- I=imread(imname);
- imfiltered='24_Filtered.png';
+% % imname='20_watermarked.png';
+% %  I=imread(imname);
+% %  imfiltered='24_Filtered.png';
 % %   
 % % % % % % % % % % %filtre gaussien
 % Iblur1 = imgaussfilt(I,1);
@@ -178,43 +203,43 @@ imname='24_watermarked.png';
 % % % % % %---------------------------------------
 % % % %  %% % % % %Data Extraction:
 % % % % % %---------------------------------------
-new_Stego = imread(imfiltered);
-[LL,LH,HL,HH] = dwt2(new_Stego,'bior2.2'); 
-message1 = '';
-msgbits = '';   msgChar  = '';
-for ii = 1:size(HH,1)*size(HH,2) 
-    if HH(ii) > 0
-        msgbits = strcat (msgbits, '1');
-    elseif HH(ii) < 0
-        msgbits = strcat (msgbits, '0');
-    else return; 
-    end
- 
-end
+% new_Stego = imread(imfiltered);
+% [LL,LH,HL,HH] = dwt2(new_Stego,'bior2.2'); 
+% message1 = '';
+% msgbits = '';   msgChar  = '';
+% for ii = 1:size(HH,1)*size(HH,2) 
+%     if HH(ii) > 0
+%         msgbits = strcat (msgbits, '1');
+%     elseif HH(ii) < 0
+%         msgbits = strcat (msgbits, '0');
+%     else return; 
+%     end
+%  
+% end
 
 %  %---------------------------------------
 %  %% % % % %comparing /testing
 %  %---------------------------------------
-% %original message: Binary of the message value.
-data2=zeros();
-for(i=1:length(msg))
-d=msg(i)+0;
-data2=[data2 d];
-end
-data2 =reshape(dec2bin(data2, 8).'-'0',1,[]);
-mydata=char((reshape((data2+'0'), 8,[]).'));
-
-% %extracted message: Binary of the message value.
-binary = reshape(msgbits.'-'0',1,[]);
-mybin=char((reshape((binary(1:218)+'0'), 8,[]).'));
-
-wsize=size(mybin,1);
-%mybin(wsize,1:size(mydata,1)) =mybin+0; % if needed, this right-pads with zero or causes t to grow
-
-res = sum( mydata(1:wsize,:)~= mybin );
- D1 = pdist2(mydata( 1:wsize,:) ,mybin  ,'hamming');
-
- mean2(D1) %average of the hamming distance
+% % %original message: Binary of the message value.
+% data2=zeros();
+% for(i=1:length(msg))
+% d=msg(i)+0;
+% data2=[data2 d];
+% end
+% data2 =reshape(dec2bin(data2, 8).'-'0',1,[]);
+% mydata=char((reshape((data2+'0'), 8,[]).'));
+% 
+% % %extracted message: Binary of the message value.
+% binary = reshape(msgbits.'-'0',1,[]);
+% mybin=char((reshape((binary(1:218)+'0'), 8,[]).'));
+% 
+% wsize=size(mybin,1);
+% %mybin(wsize,1:size(mydata,1)) =mybin+0; % if needed, this right-pads with zero or causes t to grow
+% 
+% res = sum( mydata(1:wsize,:)~= mybin );
+%  D1 = pdist2(mydata( 1:wsize,:) ,mybin  ,'hamming');
+% 
+%  mean2(D1) %average of the hamming distance
  %---------------------------------------
  %recovery cs
  %---------------------------------------
